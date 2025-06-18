@@ -4,57 +4,67 @@ using System.Collections.Generic;
 public class MassSpringRenderer : MonoBehaviour
 {
     public List<MassPoint> massPoints;
-    public List<Vector3Int> springs;
-    public Mesh sphereMesh;
-    public Material sphereMaterial;
+    public List<Spring> springs;
+
     public Material springMaterial;
-    public float spacing = 0.5f; // الطول الطبيعي للنابض
+    public Material sphereMaterial;
+    public Mesh sphereMesh;
+
+    public float pointSize = 0.1f;
 
     private void OnRenderObject()
     {
-        if (massPoints == null || springs == null || sphereMesh == null || sphereMaterial == null || springMaterial == null)
+        if (massPoints == null || springs == null || springMaterial == null || sphereMaterial == null || sphereMesh == null)
             return;
 
-        // رسم النوابض
-        springMaterial.SetPass(0); // تأكد من أن الـ Material يستخدم "Hidden/Internal-Colored"
+        DrawSprings();
+        DrawSpheres();
+    }
+
+    void DrawSprings()
+    {
+        springMaterial.SetPass(0);
         GL.PushMatrix();
+        GL.MultMatrix(Matrix4x4.identity);
         GL.Begin(GL.LINES);
 
-        foreach (var s in springs)
+        foreach (var spring in springs)
         {
-            MassPoint a = massPoints[s.x];
-            MassPoint b = massPoints[s.y];
-
-            Vector3 delta = b.Position - a.Position;
-            float currentLength = delta.magnitude;
-
-            float stretch = Mathf.Clamp01(Mathf.Abs(currentLength - spacing) / spacing);
-            Color color = GetSpringColor(stretch);
-
+            Color color = GetSpringColor(spring);
             GL.Color(color);
-            GL.Vertex(a.Position);
-            GL.Vertex(b.Position);
+            GL.Vertex(spring.A.Position);
+            GL.Vertex(spring.B.Position);
         }
 
         GL.End();
         GL.PopMatrix();
+    }
 
-        // رسم الكرات بلون ثابت
-        sphereMaterial.color = Color.red;
+    void DrawSpheres()
+    {
         for (int i = 0; i < massPoints.Count; i++)
         {
+            MassPoint mp = massPoints[i];
+
+            Matrix4x4 matrix = Matrix4x4.TRS(
+                mp.Position,
+                Quaternion.identity,
+                Vector3.one * pointSize
+            );
+
             sphereMaterial.SetPass(0);
-            Matrix4x4 matrix = Matrix4x4.TRS(massPoints[i].Position, Quaternion.identity, Vector3.one * 0.1f);
             Graphics.DrawMeshNow(sphereMesh, matrix);
         }
     }
 
-    private Color GetSpringColor(float t)
+    private Color GetSpringColor(Spring spring)
     {
-        // من أزرق → أصفر → أحمر حسب مقدار الشد
-        if (t < 0.5f)
-            return Color.Lerp(Color.blue, Color.yellow, t * 2f);
+        float currentLength = Vector3.Distance(spring.A.Position, spring.B.Position);
+        float stretchRatio = Mathf.Abs(currentLength - spring.RestLength) / spring.RestLength;
+
+        if (stretchRatio < 0.1f)
+            return Color.Lerp(Color.blue, Color.yellow, stretchRatio * 10f);
         else
-            return Color.Lerp(Color.yellow, Color.red, (t - 0.5f) * 2f);
+            return Color.Lerp(Color.yellow, Color.red, (stretchRatio - 0.1f) * 5f);
     }
 }

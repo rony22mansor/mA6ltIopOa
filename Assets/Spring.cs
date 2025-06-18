@@ -22,7 +22,7 @@ public class Spring
         float displacement = currentLength - RestLength;
         Vector3 force = Stiffness * displacement * delta.normalized;
 
-        A.ApplyForce(force, Time.deltaTime);
-        B.ApplyForce(-force, Time.deltaTime);
+        A.ApplyForce(force, Time.fixedDeltaTime);
+        B.ApplyForce(-force, Time.fixedDeltaTime);
     }
 }
