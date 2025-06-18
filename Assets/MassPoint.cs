@@ -15,12 +15,13 @@ public class MassPoint
         IsFixed = isFixed;
     }
 
-    public void ApplyForce(Vector3 force, float dt)
+    public void ApplyForce(Vector3 force, float deltaTime)
     {
         if (IsFixed) return;
+
         Vector3 acceleration = force / Mass;
-        Velocity += acceleration * dt;
-        Position += Velocity * dt;
+        Velocity += acceleration * deltaTime;
+        Position += Velocity * deltaTime;
     }
 
     public void ApplyDamping(float damping)

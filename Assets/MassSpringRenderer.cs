@@ -6,58 +6,65 @@ public class MassSpringRenderer : MonoBehaviour
     public List<MassPoint> massPoints;
     public List<Spring> springs;
 
-    private Material lineMaterial;
-    private Material sphereMaterial;
-    private Mesh sphereMesh;
+    public Material springMaterial;
+    public Material sphereMaterial;
+    public Mesh sphereMesh;
 
-    void Awake()
-    {
-        lineMaterial = new Material(Shader.Find("Hidden/Internal-Colored"));
-        sphereMaterial = new Material(Shader.Find("Standard"));
-        sphereMesh = CreateMiniSphere();
-    }
+    public float pointSize = 0.1f;
 
     private void OnRenderObject()
     {
-        if (massPoints == null || springs == null) return;
+        if (massPoints == null || springs == null || springMaterial == null || sphereMaterial == null || sphereMesh == null)
+            return;
 
-        lineMaterial.SetPass(0);
+        DrawSprings();
+        DrawSpheres();
+    }
 
+    void DrawSprings()
+    {
+        springMaterial.SetPass(0);
         GL.PushMatrix();
+        GL.MultMatrix(Matrix4x4.identity);
         GL.Begin(GL.LINES);
 
         foreach (var spring in springs)
         {
-            float stretch = Mathf.Abs(Vector3.Distance(spring.A.Position, spring.B.Position) - spring.RestLength) / spring.RestLength;
-            GL.Color(GetSpringColor(stretch));
+            Color color = GetSpringColor(spring);
+            GL.Color(color);
             GL.Vertex(spring.A.Position);
             GL.Vertex(spring.B.Position);
         }
 
         GL.End();
         GL.PopMatrix();
+    }
 
-        // رسم النقاط
+    void DrawSpheres()
+    {
         for (int i = 0; i < massPoints.Count; i++)
         {
-            Matrix4x4 matrix = Matrix4x4.TRS(massPoints[i].Position, Quaternion.identity, Vector3.one * 0.05f);
-            Graphics.DrawMesh(sphereMesh, matrix, sphereMaterial, 0);
+            MassPoint mp = massPoints[i];
+
+            Matrix4x4 matrix = Matrix4x4.TRS(
+                mp.Position,
+                Quaternion.identity,
+                Vector3.one * pointSize
+            );
+
+            sphereMaterial.SetPass(0);
+            Graphics.DrawMeshNow(sphereMesh, matrix);
         }
     }
 
-    private Color GetSpringColor(float t)
+    private Color GetSpringColor(Spring spring)
     {
-        if (t < 0.5f)
-            return Color.Lerp(Color.blue, Color.yellow, t * 2f);
-        else
-            return Color.Lerp(Color.yellow, Color.red, (t - 0.5f) * 2f);
-    }
+        float currentLength = Vector3.Distance(spring.A.Position, spring.B.Position);
+        float stretchRatio = Mathf.Abs(currentLength - spring.RestLength) / spring.RestLength;
 
-    private Mesh CreateMiniSphere()
-    {
-        GameObject temp = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        Mesh mesh = temp.GetComponent<MeshFilter>().sharedMesh;
-        Destroy(temp);
-        return mesh;
+        if (stretchRatio < 0.1f)
+            return Color.Lerp(Color.blue, Color.yellow, stretchRatio * 10f);
+        else
+            return Color.Lerp(Color.yellow, Color.red, (stretchRatio - 0.1f) * 5f);
     }
 }
