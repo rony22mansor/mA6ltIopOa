@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class Spring
 {
@@ -24,5 +25,15 @@ public class Spring
 
         A.ApplyForce(force, Time.deltaTime);
         B.ApplyForce(-force, Time.deltaTime);
+    }
+
+    public static bool Exists(List<Spring> springs, MassPoint a, MassPoint b)
+    {
+        foreach (var s in springs)
+        {
+            if ((s.A == a && s.B == b) || (s.A == b && s.B == a))
+                return true;
+        }
+        return false;
     }
 }

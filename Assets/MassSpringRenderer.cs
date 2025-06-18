@@ -4,57 +4,60 @@ using System.Collections.Generic;
 public class MassSpringRenderer : MonoBehaviour
 {
     public List<MassPoint> massPoints;
-    public List<Vector3Int> springs;
-    public Mesh sphereMesh;
-    public Material sphereMaterial;
-    public Material springMaterial;
-    public float spacing = 0.5f; // الطول الطبيعي للنابض
+    public List<Spring> springs;
+
+    private Material lineMaterial;
+    private Material sphereMaterial;
+    private Mesh sphereMesh;
+
+    void Awake()
+    {
+        lineMaterial = new Material(Shader.Find("Hidden/Internal-Colored"));
+        sphereMaterial = new Material(Shader.Find("Standard"));
+        sphereMesh = CreateMiniSphere();
+    }
 
     private void OnRenderObject()
     {
-        if (massPoints == null || springs == null || sphereMesh == null || sphereMaterial == null || springMaterial == null)
-            return;
+        if (massPoints == null || springs == null) return;
 
-        // رسم النوابض
-        springMaterial.SetPass(0); // تأكد من أن الـ Material يستخدم "Hidden/Internal-Colored"
+        lineMaterial.SetPass(0);
+
         GL.PushMatrix();
         GL.Begin(GL.LINES);
 
-        foreach (var s in springs)
+        foreach (var spring in springs)
         {
-            MassPoint a = massPoints[s.x];
-            MassPoint b = massPoints[s.y];
-
-            Vector3 delta = b.Position - a.Position;
-            float currentLength = delta.magnitude;
-
-            float stretch = Mathf.Clamp01(Mathf.Abs(currentLength - spacing) / spacing);
-            Color color = GetSpringColor(stretch);
-
-            GL.Color(color);
-            GL.Vertex(a.Position);
-            GL.Vertex(b.Position);
+            float stretch = Mathf.Abs(Vector3.Distance(spring.A.Position, spring.B.Position) - spring.RestLength) / spring.RestLength;
+            GL.Color(GetSpringColor(stretch));
+            GL.Vertex(spring.A.Position);
+            GL.Vertex(spring.B.Position);
         }
 
         GL.End();
         GL.PopMatrix();
 
-        // رسم الكرات بلون ثابت
-        sphereMaterial.color = Color.red;
+        // رسم النقاط
         for (int i = 0; i < massPoints.Count; i++)
         {
-            sphereMaterial.SetPass(0);
-            Matrix4x4 matrix = Matrix4x4.TRS(massPoints[i].Position, Quaternion.identity, Vector3.one * 0.1f);
-            Graphics.DrawMeshNow(sphereMesh, matrix);
+            Matrix4x4 matrix = Matrix4x4.TRS(massPoints[i].Position, Quaternion.identity, Vector3.one * 0.05f);
+            Graphics.DrawMesh(sphereMesh, matrix, sphereMaterial, 0);
         }
     }
 
     private Color GetSpringColor(float t)
     {
-        // من أزرق → أصفر → أحمر حسب مقدار الشد
         if (t < 0.5f)
             return Color.Lerp(Color.blue, Color.yellow, t * 2f);
         else
             return Color.Lerp(Color.yellow, Color.red, (t - 0.5f) * 2f);
+    }
+
+    private Mesh CreateMiniSphere()
+    {
+        GameObject temp = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        Mesh mesh = temp.GetComponent<MeshFilter>().sharedMesh;
+        Destroy(temp);
+        return mesh;
     }
 }
