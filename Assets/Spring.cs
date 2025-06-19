@@ -1,3 +1,5 @@
+// Spring.cs
+
 using UnityEngine;
 
 public class Spring
@@ -15,14 +17,24 @@ public class Spring
         Stiffness = stiffness;
     }
 
-    public void ApplyForce()
+    // CHANGED: Now uses AddForce to accumulate
+    // Delete the entire ApplyForce() method and replace it with this:
+    public void SolveConstraint()
     {
         Vector3 delta = B.Position - A.Position;
         float currentLength = delta.magnitude;
-        float displacement = currentLength - RestLength;
-        Vector3 force = Stiffness * displacement * delta.normalized;
 
-        A.ApplyForce(force, Time.fixedDeltaTime);
-        B.ApplyForce(-force, Time.fixedDeltaTime);
+        if (currentLength == 0) return;
+
+        // Calculate the difference from the rest length and how much to correct
+        float diff = (currentLength - RestLength) / currentLength;
+
+        // Use Stiffness as a multiplier (0 to 1 is a good range)
+        Vector3 correction = delta * 0.5f * diff * Stiffness;
+
+        A.ApplyCorrection(correction);
+        B.ApplyCorrection(-correction);
+
+ 
     }
 }
