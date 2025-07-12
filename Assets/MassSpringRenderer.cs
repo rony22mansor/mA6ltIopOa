@@ -11,6 +11,7 @@ public class MassSpringRenderer : MonoBehaviour
     public Mesh sphereMesh;
 
     public float pointSize = 0.1f;
+    public float aabbRadius = 0.05f; // ✅ ADD THIS LINE
 
     private void OnRenderObject()
     {
@@ -67,4 +68,17 @@ public class MassSpringRenderer : MonoBehaviour
         else
             return Color.Lerp(Color.yellow, Color.red, (stretchRatio - 0.1f) * 5f);
     }
+    private void OnDrawGizmos()
+    {
+        if (massPoints == null) return;
+
+        Gizmos.color = Color.green;
+        foreach (var mp in massPoints)
+        {
+            Bounds aabb = mp.GetAABB(aabbRadius);
+            Gizmos.DrawWireCube(aabb.center, aabb.size);
+        }
+    }
+
+
 }

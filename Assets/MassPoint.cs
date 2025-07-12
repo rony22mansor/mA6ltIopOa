@@ -1,22 +1,29 @@
-// MassPoint.cs
+﻿// MassPoint.cs
 
 using UnityEngine;
+using System.Collections.Generic;
+
 
 public class MassPoint
 {
+    public static List<MassPoint> AllPoints = new List<MassPoint>(); // ✅ Global list
     public Vector3 Position;
     public Vector3 OldPosition;      // REPLACES Velocity
     public Vector3 AccumulatedForce;
     public float Mass;
     public bool IsFixed;
+    public int ObjectID;
 
-    public MassPoint(Vector3 position, float mass, bool isFixed = false)
+    public MassPoint(Vector3 position, float mass, bool isFixed = false, int objectId = 0)
     {
         Position = position;
-        OldPosition = position; // Initialize OldPosition to the current position
+        OldPosition = position;
         AccumulatedForce = Vector3.zero;
         Mass = mass;
         IsFixed = isFixed;
+        ObjectID = objectId;
+        AllPoints.Add(this); // ✅ Add to global list
+
     }
 
     // ResetForce() and AddForce() remain exactly the same.
@@ -48,6 +55,10 @@ public class MassPoint
     {
         if (IsFixed) return;
         Position += correction;
+    }
+    public Vector3 GetVelocity()
+    {
+        return Position - OldPosition;
     }
 
     // The old ApplyDamping() method is no longer needed and can be deleted.
