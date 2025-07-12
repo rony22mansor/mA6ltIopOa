@@ -4,9 +4,16 @@ using System.Collections.Generic;
 [RequireComponent(typeof(MeshFilter))]
 public class MassSpringSystem : MonoBehaviour
 {
+
+    [Header("Collision")]
+    public CollisionPlane wall;
+    [Range(0, 1)] public float restitution = 0.8f;
+    public float pointRadius = 0.1f;
+
     [Header("Simulation Parameters")]
     public float stiffness = 1f;
     public float bendingStiffness = 0.5f; // NEW: For our new springs
+    public float volumeStiffness = 1.0f; // <-- ADD THIS LINE
     public float damping = 0.98f;
     public float gravity = -9.81f;
     public bool isFixedTop = false;
@@ -110,6 +117,9 @@ public class MassSpringSystem : MonoBehaviour
         // --- Step 3: Add Bending Springs (this method will now work correctly) ---
         AddBendingSprings();
 
+
+        AddVolumeSprings(); // <-- ADD THIS CALL
+
         // --- Step 4: Set Fixed Points (this logic is now cleaner) ---
         if (isFixedTop)
         {
@@ -171,6 +181,35 @@ public class MassSpringSystem : MonoBehaviour
         }
     }
 
+    void AddVolumeSprings()
+    {
+        // This method adds internal springs to resist compression.
+        // It connects each point to the point that is initially farthest away.
+        for (int i = 0; i < massPoints.Count; i++)
+        {
+            float maxDist = 0;
+            int farthestIndex = -1;
+
+            // Find the point that is farthest away from the current one
+            for (int j = 0; j < massPoints.Count; j++)
+            {
+                if (i == j) continue;
+
+                float dist = Vector3.Distance(massPoints[i].InitialPosition, massPoints[j].InitialPosition);
+                if (dist > maxDist)
+                {
+                    maxDist = dist;
+                    farthestIndex = j;
+                }
+            }
+
+            // Add a spring connecting to the farthest point, if found
+            if (farthestIndex != -1)
+            {
+                TryAddSpring(i, farthestIndex, volumeStiffness);
+            }
+        }
+    }
     void AddBendingSprings()
     {
         // This method adds springs to resist folding by connecting vertices
@@ -262,6 +301,51 @@ public class MassSpringSystem : MonoBehaviour
             foreach (var spring in springs)
             {
                 spring.SolveConstraint();
+            }
+
+            // Now, iterate through each mass point to apply gravity and collision
+            foreach (var mp in massPoints)
+            {
+                if (mp.IsFixed) continue;
+
+                // --- 1. Verlet Integration (Gravity) ---
+                // (This is an example, make sure it matches your Verlet logic)
+                Vector3 velocity = mp.Position - mp.OldPosition;
+                mp.OldPosition = mp.Position;
+                Vector3 gravityForce = Vector3.up * gravity * (Time.fixedDeltaTime * Time.fixedDeltaTime);
+                mp.Position += velocity * damping + gravityForce;
+
+
+                // --- 2. Collision Detection & Response ---
+                if (wall != null)
+                {
+                    Vector3 planeNormal = wall.GetNormal();
+                    Vector3 planePoint = wall.GetPoint();
+
+                    // Calculate distance from the point to the plane
+                    float distance = Vector3.Dot(mp.Position - planePoint, planeNormal);
+
+                    // Check for collision (if distance is less than the point's radius)
+                    if (distance < pointRadius)
+                    {
+                        // --- Position Correction ---
+                        // Move the point back to the surface of the plane
+                        mp.Position += planeNormal * (pointRadius - distance);
+
+                        // --- Velocity Correction (The Bounce) ---
+                        // Recalculate velocity after position correction
+                        Vector3 correctedVelocity = mp.Position - mp.OldPosition;
+
+                        // Calculate the component of velocity that is perpendicular to the plane
+                        float normalVelocityComponent = Vector3.Dot(correctedVelocity, planeNormal);
+
+                        // Reflect the velocity and apply restitution (bounciness)
+                        Vector3 reflectedVelocity = correctedVelocity - planeNormal * (1 + restitution) * normalVelocityComponent;
+
+                        // Update the OldPosition to apply the new velocity
+                        mp.OldPosition = mp.Position - reflectedVelocity;
+                    }
+                }
             }
         }
     }

@@ -1,5 +1,3 @@
-// Spring.cs
-
 using UnityEngine;
 
 public class Spring
@@ -13,28 +11,35 @@ public class Spring
     {
         A = a;
         B = b;
-        RestLength = Vector3.Distance(a.Position, b.Position);
         Stiffness = stiffness;
+        RestLength = Vector3.Distance(a.Position, b.Position);
     }
 
-    // CHANGED: Now uses AddForce to accumulate
-    // Delete the entire ApplyForce() method and replace it with this:
     public void SolveConstraint()
     {
-        Vector3 delta = B.Position - A.Position;
-        float currentLength = delta.magnitude;
+        Vector3 direction = B.Position - A.Position;
+        float currentLength = direction.magnitude;
 
         if (currentLength == 0) return;
 
-        // Calculate the difference from the rest length and how much to correct
-        float diff = (currentLength - RestLength) / currentLength;
+        direction.Normalize();
 
-        // Use Stiffness as a multiplier (0 to 1 is a good range)
-        Vector3 correction = delta * 0.5f * diff * Stiffness;
+        float delta = currentLength - RestLength;
+        float correction = delta * Stiffness;
 
-        A.ApplyCorrection(correction);
-        B.ApplyCorrection(-correction);
-
- 
+        // Distribute correction based on mass (or equally if fixed)
+        if (!A.IsFixed && !B.IsFixed)
+        {
+            A.Position += direction * correction * 0.5f;
+            B.Position -= direction * correction * 0.5f;
+        }
+        else if (!A.IsFixed)
+        {
+            A.Position += direction * correction;
+        }
+        else if (!B.IsFixed)
+        {
+            B.Position -= direction * correction;
+        }
     }
 }

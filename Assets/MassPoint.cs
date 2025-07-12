@@ -1,54 +1,44 @@
-// MassPoint.cs
-
 using UnityEngine;
 
 public class MassPoint
 {
     public Vector3 Position;
-    public Vector3 OldPosition;      // REPLACES Velocity
-    public Vector3 AccumulatedForce;
+    public Vector3 OldPosition;
+    public Vector3 InitialPosition { get; private set; }
+    public Vector3 Acceleration;
     public float Mass;
+    public float Radius;
     public bool IsFixed;
 
-    public MassPoint(Vector3 position, float mass, bool isFixed = false)
+    public MassPoint(Vector3 position, float mass)
     {
         Position = position;
-        OldPosition = position; // Initialize OldPosition to the current position
-        AccumulatedForce = Vector3.zero;
+        OldPosition = position;
+        Acceleration = Vector3.zero;
+        InitialPosition = position;
         Mass = mass;
-        IsFixed = isFixed;
+        IsFixed = false;
+        Radius = 0.1f;
     }
 
-    // ResetForce() and AddForce() remain exactly the same.
-    public void ResetForce()
-    {
-        AccumulatedForce = Vector3.zero;
-    }
-
-    public void AddForce(Vector3 force)
-    {
-        if (IsFixed) return;
-        AccumulatedForce += force;
-    }
-
-    // The Integrate method is completely replaced with the Verlet formula.
-    // Damping is now handled inside.
-    // The Integrate method now just applies gravity.
-    public void Integrate(float deltaTime, float gravity, float damping) // Add damping here
+    public void Integrate(float deltaTime, float gravityY, float damping)
     {
         if (IsFixed) return;
 
-        Vector3 velocity = (Position - OldPosition) * damping; // Apply damping to the velocity
-        OldPosition = Position;
-        Position += velocity + Vector3.up * gravity * (deltaTime * deltaTime);
+        // Apply gravity
+        Acceleration = new Vector3(0, gravityY, 0);
+
+        // Verlet integration
+        Vector3 currentPosition = Position;
+        Position += (Position - OldPosition) * damping + Acceleration * deltaTime * deltaTime;
+        OldPosition = currentPosition;
     }
 
-    // ADD this new method to handle corrections from springs
     public void ApplyCorrection(Vector3 correction)
     {
-        if (IsFixed) return;
-        Position += correction;
+        if (!IsFixed)
+        {
+            Position += correction;
+        }
     }
-
-    // The old ApplyDamping() method is no longer needed and can be deleted.
 }

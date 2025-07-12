@@ -9,62 +9,37 @@ public class MassSpringRenderer : MonoBehaviour
     public Material springMaterial;
     public Material sphereMaterial;
     public Mesh sphereMesh;
+    public float pointSize;
 
-    public float pointSize = 0.1f;
-
-    private void OnRenderObject()
+    void OnRenderObject()
     {
-        if (massPoints == null || springs == null || springMaterial == null || sphereMaterial == null || sphereMesh == null)
-            return;
-
-        DrawSprings();
-        DrawSpheres();
-    }
-
-    void DrawSprings()
-    {
-        springMaterial.SetPass(0);
-        GL.PushMatrix();
-        GL.MultMatrix(Matrix4x4.identity);
-        GL.Begin(GL.LINES);
-
-        foreach (var spring in springs)
+        // Draw Springs
+        if (springs != null && springMaterial != null)
         {
-            Color color = GetSpringColor(spring);
-            GL.Color(color);
-            GL.Vertex(spring.A.Position);
-            GL.Vertex(spring.B.Position);
+            springMaterial.SetPass(0);
+            GL.Begin(GL.LINES);
+            GL.Color(Color.blue);
+            foreach (var spring in springs)
+            {
+                GL.Vertex(spring.A.Position);
+                GL.Vertex(spring.B.Position);
+            }
+            GL.End();
         }
 
-        GL.End();
-        GL.PopMatrix();
-    }
-
-    void DrawSpheres()
-    {
-        for (int i = 0; i < massPoints.Count; i++)
+        // Draw Mass Points (as spheres)
+        if (massPoints != null && sphereMaterial != null && sphereMesh != null)
         {
-            MassPoint mp = massPoints[i];
-
-            Matrix4x4 matrix = Matrix4x4.TRS(
-                mp.Position,
-                Quaternion.identity,
-                Vector3.one * pointSize
-            );
-
-            sphereMaterial.SetPass(0);
-            Graphics.DrawMeshNow(sphereMesh, matrix);
+            foreach (var point in massPoints)
+            {
+                Graphics.DrawMesh(
+                    sphereMesh,
+                    point.Position,
+                    Quaternion.identity,
+                    sphereMaterial,
+                    0
+                );
+            }
         }
-    }
-
-    private Color GetSpringColor(Spring spring)
-    {
-        float currentLength = Vector3.Distance(spring.A.Position, spring.B.Position);
-        float stretchRatio = Mathf.Abs(currentLength - spring.RestLength) / spring.RestLength;
-
-        if (stretchRatio < 0.1f)
-            return Color.Lerp(Color.blue, Color.yellow, stretchRatio * 10f);
-        else
-            return Color.Lerp(Color.yellow, Color.red, (stretchRatio - 0.1f) * 5f);
     }
 }
