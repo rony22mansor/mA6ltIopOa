@@ -38,20 +38,36 @@ public class MassSpringSystem : MonoBehaviour
     private int[] originalTriangles;
     private HashSet<(int, int)> springPairs = new HashSet<(int, int)>();
 
+    // ---- NEW VARIABLES TO ADD ----
+    private Mesh deformableMesh;
+    private Vector3[] updatedVertices;
+    private int[] vertexMap; // This will store the mapping from original vertices to unique mass points
+    // ---- END OF NEW VARIABLES ----
+
+
     void Start()
     {
-        originalMesh = GetComponent<MeshFilter>().mesh;
+        // Get an INSTANCE of the mesh from the filter. This is important.
+        deformableMesh = GetComponent<MeshFilter>().mesh;
 
         if (resolution > 1)
-            originalMesh = SubdivideMesh(originalMesh, resolution);
+        {
+            // Subdivide the mesh...
+            deformableMesh = SubdivideMesh(deformableMesh, resolution);
+
+            // ---- THE CRITICAL FIX ----
+            // Tell the MeshFilter to use this new mesh for rendering!
+            GetComponent<MeshFilter>().mesh = deformableMesh;
+        }
 
         // This single method now handles vertex welding and spring creation correctly.
         InitializeWeldedMassSpringSystem();
 
+        //// The rest of this is for drawing gizmos. You can disable this
+        //// once the main mesh is deforming correctly.
         var renderer = gameObject.AddComponent<MassSpringRenderer>();
         renderer.massPoints = massPoints;
         renderer.springs = springs;
-
         renderer.springMaterial = new Material(Shader.Find("Hidden/Internal-Colored"));
         renderer.sphereMaterial = new Material(Shader.Find("Standard"));
         renderer.sphereMesh = CreateSphereMesh();
@@ -64,16 +80,21 @@ public class MassSpringSystem : MonoBehaviour
         springs.Clear();
         springPairs.Clear();
 
-        Vector3[] originalVertices = originalMesh.vertices;
-        int[] originalTriangles = originalMesh.triangles;
+        // CHANGE THIS: Use the deformable mesh's vertices
+        Vector3[] originalVertices = deformableMesh.vertices;
+        int[] originalTriangles = deformableMesh.triangles;
+
+        // ---- NEW: Initialize our vertex arrays ----
+        updatedVertices = new Vector3[originalVertices.Length];
+        // CHANGE THIS: Initialize the class-level vertexMap instead of a local one
+        vertexMap = new int[originalVertices.Length];
+        // ----
 
         // --- Step 1: Weld Vertices ---
-        // This logic ensures we only create ONE MassPoint for any unique position.
-
-        // Maps a unique position to the index of the MassPoint for that position.
         Dictionary<Vector3, int> positionToUniqueIndex = new Dictionary<Vector3, int>();
-        // Maps each original vertex index to the index of its corresponding UNIQUE MassPoint.
-        int[] vertexMap = new int[originalVertices.Length];
+
+        // REMOVE THIS LINE: We are now using the class-level variable
+        // int[] vertexMap = new int[originalVertices.Length]; 
 
         for (int i = 0; i < originalVertices.Length; i++)
         {
@@ -117,7 +138,6 @@ public class MassSpringSystem : MonoBehaviour
         // --- Step 3: Add Bending Springs (this method will now work correctly) ---
         AddBendingSprings();
 
-
         AddVolumeSprings(); // <-- ADD THIS CALL
 
         // --- Step 4: Set Fixed Points (this logic is now cleaner) ---
@@ -139,48 +159,27 @@ public class MassSpringSystem : MonoBehaviour
         }
     }
 
-    void GenerateMassPoints()
+    void LateUpdate()
     {
-        massPoints.Clear();
-        float maxY = float.MinValue;
-
-        foreach (var v in originalVertices)
+        // 1. Loop through all original vertices
+        for (int i = 0; i < updatedVertices.Length; i++)
         {
-            Vector3 worldPos = transform.TransformPoint(v);
-            massPoints.Add(new MassPoint(worldPos, 1f));
-            if (worldPos.y > maxY)
-                maxY = worldPos.y;
+            // 2. Find the corresponding mass point using our map
+            int massPointIndex = vertexMap[i];
+            MassPoint mp = massPoints[massPointIndex];
+
+            // 3. Convert the mass point's world position back to the object's local space
+            updatedVertices[i] = transform.InverseTransformPoint(mp.Position);
         }
 
-        if (isFixedTop)
-        {
-            float thresholdY = maxY - (maxY * fixedTopRatio);
-            foreach (var mp in massPoints)
-            {
-                if (mp.Position.y >= thresholdY)
-                    mp.IsFixed = true;
-            }
-        }
+        // 4. Apply the new vertex positions to the mesh
+        deformableMesh.vertices = updatedVertices;
+
+        // 5. Recalculate normals and bounds for correct lighting and rendering
+        deformableMesh.RecalculateNormals();
+        deformableMesh.RecalculateBounds();
     }
-
-    void CreateSpringsFromMesh()
-    {
-        springs.Clear();
-        springPairs.Clear(); // Clear the set for a fresh start
-
-        for (int i = 0; i < originalTriangles.Length; i += 3)
-        {
-            int i0 = originalTriangles[i];
-            int i1 = originalTriangles[i + 1];
-            int i2 = originalTriangles[i + 2];
-
-            // Use the new TryAddSpring with the main stiffness parameter
-            TryAddSpring(i0, i1, stiffness);
-            TryAddSpring(i1, i2, stiffness);
-            TryAddSpring(i2, i0, stiffness);
-        }
-    }
-
+    
     void AddVolumeSprings()
     {
         // This method adds internal springs to resist compression.
@@ -358,51 +357,65 @@ public class MassSpringSystem : MonoBehaviour
         return mesh;
     }
 
-    Mesh SubdivideMesh(Mesh mesh, int factor)
+    Mesh SubdivideMesh(Mesh mesh, int resolution)
     {
-        Mesh newMesh = new Mesh();
-        var verts = new List<Vector3>();
-        var tris = new List<int>();
+        // A dictionary to store the index of newly created vertices on an edge.
+        // The key is a sorted pair of original vertex indices.
+        var midpointCache = new Dictionary<(int, int), int>();
+        var oldVerts = new List<Vector3>(mesh.vertices);
+        var oldTris = new List<int>(mesh.triangles);
 
-        Vector3[] oldVerts = mesh.vertices;
-        int[] oldTris = mesh.triangles;
-
-        for (int i = 0; i < oldTris.Length; i += 3)
+        for (int i = 0; i < resolution; i++)
         {
-            Vector3 v0 = oldVerts[oldTris[i]];
-            Vector3 v1 = oldVerts[oldTris[i + 1]];
-            Vector3 v2 = oldVerts[oldTris[i + 2]];
+            var newTris = new List<int>();
+            midpointCache.Clear();
 
-            for (int u = 0; u < factor; u++)
+            for (int j = 0; j < oldTris.Count; j += 3)
             {
-                for (int v = 0; v < factor - u; v++)
-                {
-                    float fu0 = (float)u / factor;
-                    float fv0 = (float)v / factor;
-                    float fu1 = (float)(u + 1) / factor;
-                    float fv1 = (float)v / factor;
-                    float fu2 = (float)u / factor;
-                    float fv2 = (float)(v + 1) / factor;
+                int i0 = oldTris[j];
+                int i1 = oldTris[j + 1];
+                int i2 = oldTris[j + 2];
 
-                    Vector3 p0 = v0 * (1 - fu0 - fv0) + v1 * fu0 + v2 * fv0;
-                    Vector3 p1 = v0 * (1 - fu1 - fv1) + v1 * fu1 + v2 * fv1;
-                    Vector3 p2 = v0 * (1 - fu2 - fv2) + v1 * fu2 + v2 * fv2;
+                // Get or create the midpoints of the triangle's edges
+                int m01 = GetMidpoint(i0, i1, oldVerts, midpointCache);
+                int m12 = GetMidpoint(i1, i2, oldVerts, midpointCache);
+                int m20 = GetMidpoint(i2, i0, oldVerts, midpointCache);
 
-                    int i0 = verts.Count;
-                    verts.Add(p0);
-                    verts.Add(p1);
-                    verts.Add(p2);
-
-                    tris.Add(i0);
-                    tris.Add(i0 + 1);
-                    tris.Add(i0 + 2);
-                }
+                // Create the 4 new triangles
+                newTris.AddRange(new[] { i0, m01, m20 });
+                newTris.AddRange(new[] { i1, m12, m01 });
+                newTris.AddRange(new[] { i2, m20, m12 });
+                newTris.AddRange(new[] { m01, m12, m20 }); // The central triangle
             }
+            // The newly created triangles are now the old triangles for the next iteration
+            oldTris = newTris;
         }
 
-        newMesh.SetVertices(verts);
-        newMesh.SetTriangles(tris, 0);
+        Mesh newMesh = new Mesh();
+        newMesh.SetVertices(oldVerts);
+        newMesh.SetTriangles(oldTris, 0);
         newMesh.RecalculateNormals();
         return newMesh;
+    }
+
+    private int GetMidpoint(int indexA, int indexB, List<Vector3> vertices, Dictionary<(int, int), int> cache)
+    {
+        // Create a sorted key to ensure the same edge always produces the same key
+        var key = (Mathf.Min(indexA, indexB), Mathf.Max(indexA, indexB));
+
+        // If we've already created a vertex for this edge, return its index
+        if (cache.TryGetValue(key, out int existingIndex))
+        {
+            return existingIndex;
+        }
+
+        // Otherwise, create the new vertex
+        Vector3 newVert = (vertices[indexA] + vertices[indexB]) * 0.5f;
+        int newIndex = vertices.Count;
+        vertices.Add(newVert);
+
+        // Add the new index to the cache for future lookups
+        cache.Add(key, newIndex);
+        return newIndex;
     }
 }
