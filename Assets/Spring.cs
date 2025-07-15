@@ -15,31 +15,21 @@ public class Spring
         RestLength = Vector3.Distance(a.Position, b.Position);
     }
 
+    // ? ?? ???????: ??????? ???? ???? ?? ??? majd ????? ???? ?????? ??? ApplyCorrection
     public void SolveConstraint()
     {
-        Vector3 direction = B.Position - A.Position;
-        float currentLength = direction.magnitude;
+        Vector3 delta = B.Position - A.Position;
+        float currentLength = delta.magnitude;
 
         if (currentLength == 0) return;
 
-        direction.Normalize();
+        // ???? ????? ?? ????? ??????? ?????? ??????? ???????
+        float diff = (currentLength - RestLength) / currentLength;
 
-        float delta = currentLength - RestLength;
-        float correction = delta * Stiffness;
+        // ??????? ??????? ???????? (?????? ??? 0 ? 1 ??????)
+        Vector3 correction = delta * 0.5f * diff * Stiffness;
 
-        // Distribute correction based on mass (or equally if fixed)
-        if (!A.IsFixed && !B.IsFixed)
-        {
-            A.Position += direction * correction * 0.5f;
-            B.Position -= direction * correction * 0.5f;
-        }
-        else if (!A.IsFixed)
-        {
-            A.Position += direction * correction;
-        }
-        else if (!B.IsFixed)
-        {
-            B.Position -= direction * correction;
-        }
+        A.ApplyCorrection(correction);
+        B.ApplyCorrection(-correction);
     }
 }
