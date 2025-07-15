@@ -20,6 +20,7 @@ public class MassSpringSystem : MonoBehaviour
     [Range(0, 1)] public float fixedTopRatio = 0.2f;
 
     [Header("Rendering")]
+    public float collisionColorIntensity = 50f;
     public float pointSize = 0.05f;
 
     [Header("Physics")]
@@ -51,19 +52,31 @@ public class MassSpringSystem : MonoBehaviour
 
         InitializeWeldedMassSpringSystem();
 
-        // --- ????? ????????? ---
         var renderer = gameObject.AddComponent<MassSpringRenderer>();
         renderer.massPoints = massPoints;
         renderer.springs = springs;
 
-        // ??????? ???? ????? ????? ?????
         var sharedMaterial = new Material(Shader.Find("Hidden/Internal-Colored"));
         renderer.springMaterial = sharedMaterial;
         renderer.pointMaterial = sharedMaterial;
-
-        // ?? ??? ?????? ?????? ?? sphereMesh ? sphereMaterial
-
         renderer.pointSize = pointSize;
+
+        // ????? ??? ?????? ?? ???? ?????????
+        CollisionManager.Instance.RegisterSystem(this);
+    }
+
+    void OnDestroy()
+    {
+        // ????? ????? ?????? ??? ??????
+        if (CollisionManager.Instance != null)
+        {
+            CollisionManager.Instance.UnregisterSystem(this);
+        }
+    }
+
+    public List<MassPoint> GetMassPoints()
+    {
+        return massPoints;
     }
 
     void InitializeWeldedMassSpringSystem()
@@ -87,7 +100,8 @@ public class MassSpringSystem : MonoBehaviour
             {
                 uniqueIndex = massPoints.Count;
                 Vector3 worldPos = transform.TransformPoint(localPos);
-                massPoints.Add(new MassPoint(worldPos, 1f, false, gameObject.GetInstanceID()));
+                // ????? ??? ??? ??????? ??? ????
+                massPoints.Add(new MassPoint(worldPos, 1f, collisionPointRadius, false, gameObject.GetInstanceID()));
                 positionToUniqueIndex.Add(localPos, uniqueIndex);
             }
             vertexMap[i] = uniqueIndex;
@@ -147,6 +161,7 @@ public class MassSpringSystem : MonoBehaviour
                 spring.SolveConstraint();
             }
 
+            // ??????? ?????? ???????? (???? ???? ??????)
             foreach (var mp in massPoints)
             {
                 if (mp.Position.y < groundLevel)
@@ -154,7 +169,7 @@ public class MassSpringSystem : MonoBehaviour
                     mp.Position = new Vector3(mp.Position.x, groundLevel, mp.Position.z);
                 }
 
-                if (wall != null)
+                if (wall != null && wall.IsPointOnBounds(mp.Position))
                 {
                     Vector3 planeNormal = wall.GetNormal();
                     Vector3 planePoint = wall.GetPoint();
@@ -171,48 +186,7 @@ public class MassSpringSystem : MonoBehaviour
                 }
             }
         }
-
-        List<MassPoint> allPoints = MassPoint.AllPoints;
-        for (int i = 0; i < allPoints.Count; i++)
-        {
-            for (int j = i + 1; j < allPoints.Count; j++)
-            {
-                MassPoint mpA = allPoints[i];
-                MassPoint mpB = allPoints[j];
-
-                if (mpA.ObjectID == mpB.ObjectID) continue;
-
-                Bounds aabbA = new Bounds(mpA.Position, Vector3.one * collisionPointRadius * 2);
-                Bounds aabbB = new Bounds(mpB.Position, Vector3.one * collisionPointRadius * 2);
-
-                if (aabbA.Intersects(aabbB))
-                {
-                    Vector3 diff = mpB.Position - mpA.Position;
-                    if (diff == Vector3.zero) diff = Vector3.right * 0.001f;
-
-                    Vector3 normal = diff.normalized;
-                    Vector3 velA = mpA.GetVelocity();
-                    Vector3 velB = mpB.GetVelocity();
-                    Vector3 relativeVelocity = velB - velA;
-                    float separatingVelocity = Vector3.Dot(relativeVelocity, normal);
-
-                    if (separatingVelocity > 0) continue;
-
-                    float impulseMagnitude = -(1 + restitution) * separatingVelocity * 0.5f;
-                    Vector3 impulseVec = impulseMagnitude * normal;
-
-                    if (!mpA.IsFixed) mpA.OldPosition -= impulseVec;
-                    if (!mpB.IsFixed) mpB.OldPosition += impulseVec;
-
-                    float overlap = (collisionPointRadius * 2 - diff.magnitude) * 0.5f;
-                    if (overlap > 0)
-                    {
-                        if (!mpA.IsFixed) mpA.Position -= normal * overlap;
-                        if (!mpB.IsFixed) mpB.Position += normal * overlap;
-                    }
-                }
-            }
-        }
+        // ?? ??? ???? ??????? ??? ???????? ?? ??? ??? CollisionManager ??????? ????
     }
 
     void AddVolumeSprings()
@@ -278,8 +252,6 @@ public class MassSpringSystem : MonoBehaviour
             springs.Add(new Spring(massPoints[min], massPoints[max], springStiffness));
         }
     }
-
-    // ?? ??? ???? CreateSphereMesh() ???????
 
     Mesh SubdivideMesh(Mesh mesh, int resolution)
     {
