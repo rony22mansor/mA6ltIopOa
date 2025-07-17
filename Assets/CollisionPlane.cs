@@ -3,7 +3,7 @@ using UnityEngine;
 public class CollisionPlane : MonoBehaviour
 {
     public Vector3 normal = Vector3.up;
-    public Vector2 size = new Vector2(10, 10); // Defines the width and length
+    public Vector2 size = new Vector2(10, 10);
     public Color gizmoColor = new Color(0, 1, 0, 0.5f);
 
     public Vector3 GetPoint()
@@ -16,7 +16,7 @@ public class CollisionPlane : MonoBehaviour
         return normal.normalized;
     }
 
-    // Checks if a point is within our rectangular bounds
+    
     public bool IsPointOnBounds(Vector3 worldPoint)
     {
         Vector3 localPoint = transform.InverseTransformPoint(worldPoint);
